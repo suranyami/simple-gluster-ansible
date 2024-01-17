@@ -1,0 +1,17 @@
+---
+- name: Concatenate node:brick paths
+  ansible.builtin.set_fact:
+    node_list_string: |
+      {% for host in groups["all"] %}
+        {% for disk in hostvars[host].disks %}
+          {{ host }}:{{ disk.brick }}
+        {% endfor %}
+      {% endfor %}
+- name: Clean up space
+  ansible.builtin.set_fact:
+    bricks: |
+      {{ node_list_string | regex_replace('([\s+ | \\n]+)', ' ') | trim }}
+
+- name: Debug output
+  ansible.builtin.debug:
+    msg: "{{ bricks }}"
