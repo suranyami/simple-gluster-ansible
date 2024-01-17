@@ -1,0 +1,9 @@
+---
+- name: Install and configure GlusterFS on all nodes
+  hosts: gluster
+  vars_files:
+    - external_vars.yml
+  gather_facts: false
+  tasks:
+    - name: Test
+      ansible.builtin.include_tasks: roles/glusterfs/tasks/test.yml

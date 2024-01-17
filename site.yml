@@ -1,9 +1,12 @@
 ---
-
 - name: Install and configure GlusterFS on all nodes
   hosts: gluster
   vars_files:
     - external_vars.yml
+  vars:
+    hostname: '{{ ansible_facts["hostname"] }}'
+    disks: '{{ hostvars[hostname]["disks"] }}'
+
   become: true
   roles:
     - glusterfs
