@@ -1,0 +1,40 @@
+---
+- name: Add arm64 architecture to dpkg if default architecture is set to aarch64
+  ansible.builtin.lineinfile:
+    create: true
+    state: present
+    line: arm64
+    dest: /var/lib/dpkg/arch
+  when: ansible_architecture == 'aarch64'
+
+- name: Add GlusterFS GPG apt key
+  ansible.builtin.apt_key:
+    url: https://download.gluster.org/pub/gluster/glusterfs/7/rsa.pub
+    state: present
+
+- name: Add GlusterFS repository
+  ansible.builtin.apt_repository:
+    repo: ppa:gluster/glusterfs-7
+    codename: bionic
+    state: present
+
+- name: Update apt cache and packages
+  ansible.builtin.apt:
+    update_cache: "yes"
+    autoclean: "yes"
+    autoremove: "yes"
+    upgrade: dist
+
+- name: Install GlusterFS server and client
+  ansible.builtin.apt:
+    pkg:
+      - glusterfs-server
+      - glusterfs-client
+      - glusterfs-common
+
+- name: Enable glusterd
+  ansible.builtin.systemd:
+    name: glusterd
+    enabled: true
+    masked: false
+    state: started

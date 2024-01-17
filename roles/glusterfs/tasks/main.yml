@@ -1,175 +1,52 @@
 ---
+# - name: Ensure gluster packages installed and started
+#   include_tasks: roles/glusterfs/tasks/packages.yml
 
-# obtain a list of all hosts
-- name: Obtain a list of all hosts
-  set_fact:
-    nodeListString: |
-      {% for host in groups["all"] %}
-      {{ hostvars[host]["ansible_default_ipv4"]["address"] }}
-      {% endfor %}
+# - name: Ensure bricks set up
+#   include_tasks: roles/glusterfs/tasks/bricks.yml
 
-- name: Convert list of all hosts to a Jinja2 list
-  set_fact:
-    nodeList: "{{ nodeListString.split('\n') | reject('equalto', '') | list }}"
+# - name: Configure SSL encryption
+#   include_tasks: roles/glusterfs/tasks/ssl.yml
 
-- name: Add arm64 architecture to dpkg if default architecture is set to aarch64
-  lineinfile:
-    create: yes
-    state: present
-    line: 'arm64'
-    dest: /var/lib/dpkg/arch
-  when: ansible_architecture == 'aarch64'
+# TODO: update /etc/hosts for all nodes
+# TODO: ensure SSH keygen run
+# TODO: ensure ssh-copy-id from master to each peer
+# - name: Create a trusted storage pool
+#   gluster.gluster.gluster_peer:
+#     state: present
+#     nodes: "{{ gluster_cluster_hosts }}"
 
-- name: Add GlusterFS GPG apt key
-  apt_key:
-    url: https://download.gluster.org/pub/gluster/glusterfs/7/rsa.pub
-    state: present
+- name: Check if volume exists
+  ansible.builtin.shell: |
+    gluster volume list
+  register: vol_list
 
-- name: Add GlusterFS repository
-  apt_repository:
-    repo: 'ppa:gluster/glusterfs-7'
-    codename: bionic
-    state: present
-
-- name: Update apt cache and packages
-  apt:
-    update_cache: 'yes'
-    autoclean: 'yes'
-    autoremove: 'yes'
-    upgrade: 'dist'
-
-- name: Install GlusterFS server and client
-  apt:
-    pkg:
-    - glusterfs-server
-    - glusterfs-client
-    - glusterfs-common
-
-- name: Create brick location on the filesystem
-  file: 
-    path: '{{ gluster_brick_path }}'
-    state: directory
-
-- name: Create mount location on the filesystem
-  file: 
-    path: '{{ gluster_mountpoint }}'
-    state: directory
-
-- name: Generate Diffie-Hellman parameters to use for in-transit data encryption
-  openssl_dhparam:
-    path: /etc/ssl/dhparam.pem
-    size: 4096
-
-- name: Generate an OpenSSL private key to use for in-transit data encryption
-  openssl_privatekey:
-    path: /etc/ssl/glusterfs.key
-    size: 4096
-
-- name: Generate an OpenSSL Certificate Signing Request to use for in-transit data encryption
-  openssl_csr:
-    path: /etc/ssl/glusterfs.csr
-    privatekey_path: /etc/ssl/glusterfs.key
-    common_name: '{{ ansible_default_ipv4["address"] }}'
-
-- name: Generate a self-signed OpenSSL certificate to use for in-transit data encryption
-  openssl_certificate:
-    path: /etc/ssl/glusterfs.pem
-    privatekey_path: /etc/ssl/glusterfs.key
-    csr_path: /etc/ssl/glusterfs.csr
-    provider: selfsigned
-
-- name: Retrieve certificates
-  slurp:
-    src: /etc/ssl/glusterfs.pem
-  register: tls_private_key
-
-- name: Add all certificates to all nodes so they can identify each other
-  blockinfile:
-    path: /etc/ssl/glusterfs.ca
-    create: yes
-    block: |
-      {% for host in groups["all"] %}
-      {{ hostvars[host]["tls_private_key"]["content"] | b64decode }}
-      {% endfor %}
-
-- name: Touch file needed to force TLS between clients and servers
-  file:
-    path: '/var/lib/glusterd/secure-access'
-    state: touch
-
-- name: Enable glusterd
-  systemd:
-    name: glusterd
-    enabled: yes
-    masked: no
-    state: started
-    
-- name: Enable glustereventsd
-  systemd:
-    name: glustereventsd
-    enabled: yes
-    masked: no
-    state: started
-
-- name: Gluster peer probe all other nodes from one random node
-  shell: |
-      {% if nodeList[0] == ansible_default_ipv4["address"] %}
-        {% for nodeIP in nodeList %}
-          {% if nodeIP != ansible_default_ipv4["address"] %}
-            gluster peer probe {{ nodeIP }}
-          {% endif %}
-        {% endfor %}
-      {% endif %}
-      true
-
-- name: Gluster peer probe that one random node from all other nodes
-  shell: |
-      {% if nodeList[0] != ansible_default_ipv4["address"] %}
-        gluster peer probe {{ nodeList[0] }}
-      {% endif %}
-      true
+- name: Debug vol_list
+  ansible.builtin.debug:
+    var: vol_list.stdout
 
 - name: Create main gluster volume
-  gluster_volume:
-    state: present
-    name: main
-    bricks: '{{ gluster_brick_path }}'
-    replicas: '{{ nodeList | length }}'
-    force: yes
-    cluster: '{{ nodeList }}'
-    options:
-      { performance.cache-size: 128MB,
-        write-behind: 'off',
-        performance.write-behind-window-size: '0B',
-        quick-read: 'on',
-        auth.allow: "{{ nodeList|join(',') }}",
-        auth.ssl-allow:  "{{ nodeList|join(',') }}",
-        ssl.cipher-list: 'HIGH:!SSLv2:!SSLv3',
-        nfs.disable: 'on',
-        performance.flush-behind: 'off',
-        cluster.data-self-heal-algorithm: 'full',
-        client.ssl: 'on',
-        server.ssl: 'on'
-      }
-  run_once: true
+  ansible.builtin.shell: |
+    gluster volume create {{ volume_name }} disperse {{ bricks }} force
+  when: volume_name not in vol_list.stdout
 
 - name: Start main gluster volume
-  gluster_volume:
+  gluster.gluster.gluster_volume:
     state: started
-    name: main
+    name: "{{ volume_name }}"
 
 - name: Enable automount of GlusterFS
-  mount:
-    path: '{{ gluster_mountpoint }}'
-    src: '{{ ansible_default_ipv4["address"] }}:/main'
+  ansible.posix.mount:
+    path: /mnt
+    src: localhost:/{{ volume_name }}
     fstype: glusterfs
     opts: defaults,_netdev,log-file=/var/log/glusterfs/client.log,noauto,x-systemd.automount
     state: present
 
 - name: Mount GlusterFS
-  mount:
-    path: '{{ gluster_mountpoint }}'
-    src: '{{ ansible_default_ipv4["address"] }}:/main'
+  ansible.posix.mount:
+    path: /mnt
+    src: localhost:/{{ volume_name }}
     fstype: glusterfs
     opts: defaults,_netdev,log-file=/var/log/glusterfs/client.log,noauto,x-systemd.automount
     state: mounted

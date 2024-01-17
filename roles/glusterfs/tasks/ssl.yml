@@ -1,0 +1,44 @@
+---
+- name: Generate Diffie-Hellman parameters to use for in-transit data encryption
+  community.crypto.openssl_dhparam:
+    path: /etc/ssl/dhparam.pem
+    size: 4096
+
+- name: Generate an OpenSSL private key to use for in-transit data encryption
+  community.crypto.openssl_privatekey:
+    path: /etc/ssl/glusterfs.key
+    size: 4096
+
+- name: Generate an OpenSSL Certificate Signing Request to use for in-transit data encryption
+  community.crypto.openssl_csr:
+    path: /etc/ssl/glusterfs.csr
+    privatekey_path: /etc/ssl/glusterfs.key
+    common_name: '{{ ansible_default_ipv4["address"] }}'
+
+- name: Generate a self-signed OpenSSL certificate to use for in-transit data encryption
+  community.crypto.x509_certificate:
+    path: /etc/ssl/glusterfs.pem
+    privatekey_path: /etc/ssl/glusterfs.key
+    csr_path: /etc/ssl/glusterfs.csr
+    provider: selfsigned
+
+- name: Retrieve certificates
+  ansible.builtin.slurp:
+    src: /etc/ssl/glusterfs.pem
+  register: tls_private_key
+
+- name: Add all certificates to all nodes so they can identify each other
+  ansible.builtin.blockinfile:
+    path: /etc/ssl/glusterfs.ca
+    create: true
+    mode: "0644"
+    block: |
+      {% for host in groups["all"] %}
+      {{ hostvars[host]["tls_private_key"]["content"] | b64decode }}
+      {% endfor %}
+
+- name: Touch file needed to force TLS between clients and servers
+  ansible.builtin.file:
+    path: /var/lib/glusterd/secure-access
+    state: touch
+    mode: "0664"
