@@ -1,0 +1,23 @@
+---
+- name: Create mount location for drives
+  ansible.builtin.file:
+    path: '{{ item["brick"] }}'
+    state: directory
+    mode: "0755"
+  loop: "{{ disks }}"
+
+- name: Ensure disks are mounted to brick paths
+  ansible.posix.mount:
+    path: '{{ item["brick"] }}'
+    src: /dev/{{ item["dev"] }}
+    fstype: ext4
+    state: mounted
+  loop: "{{ disks }}"
+
+- name: Ensure brick dirs exist
+  ansible.builtin.file:
+    path: '{{ item["brick"] }}/brick'
+    state: directory
+    mode: "0755"
+
+  loop: "{{ disks }}"
