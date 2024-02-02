@@ -4,13 +4,15 @@
     path: '{{ item["brick"] }}'
     state: directory
     mode: "0755"
+    owner: dietpi
+    group: dietpi
   loop: "{{ disks }}"
 
 - name: Ensure disks are mounted to brick paths
   ansible.posix.mount:
     path: '{{ item["brick"] }}'
     src: /dev/{{ item["dev"] }}
-    fstype: ext4
+    fstype: '{{ item["format"] }}'
     state: mounted
   loop: "{{ disks }}"
 
