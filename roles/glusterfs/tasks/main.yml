@@ -18,29 +18,28 @@
 - name: Debug vol_list
   ansible.builtin.debug:
     var: vol_list.stdout
+# - name: Create main gluster volume
+#   ansible.builtin.shell: |
+#     gluster volume create {{ volume_name }} disperse 3 {{ bricks }} force
+#   when: volume_name not in vol_list.stdout
 
-- name: Create main gluster volume
-  ansible.builtin.shell: |
-    gluster volume create {{ volume_name }} disperse {{ bricks }} force
-  when: volume_name not in vol_list.stdout
-
-- name: Start main gluster volume
-  gluster.gluster.gluster_volume:
-    state: started
-    name: "{{ volume_name }}"
+# - name: Start main gluster volume
+#   gluster.gluster.gluster_volume:
+#     state: started
+#     name: main
 
 - name: Enable automount of GlusterFS
   ansible.posix.mount:
-    path: /mnt
+    path: /mnt/{{ volume_name }}
     src: localhost:/{{ volume_name }}
     fstype: glusterfs
-    opts: defaults,_netdev,log-file=/var/log/glusterfs/client.log,noauto,x-systemd.automount
+    opts: defaults,_netdev 0 0
     state: present
 
 - name: Mount GlusterFS
   ansible.posix.mount:
-    path: /mnt
+    path: /mnt/{{ volume_name }}
     src: localhost:/{{ volume_name }}
     fstype: glusterfs
-    opts: defaults,_netdev,log-file=/var/log/glusterfs/client.log,noauto,x-systemd.automount
+    opts: defaults,_netdev 0 0
     state: mounted
