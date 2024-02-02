@@ -21,5 +21,6 @@
     path: '{{ item["brick"] }}/brick'
     state: directory
     mode: "0755"
-
-  loop: "{{ disks }}"
+    owner: dietpi
+    group: dietpi
+  loop: "{{ hostvars[inventory_hostname].disks }}"
