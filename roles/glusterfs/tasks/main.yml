@@ -1,20 +1,14 @@
 ---
-# - name: Ensure gluster packages installed and started
-#   include_tasks: roles/glusterfs/tasks/packages.yml
+- name: Ensure gluster packages installed and started
+  ansible.builtin.include_tasks: roles/glusterfs/tasks/packages.yml
 
-# - name: Ensure bricks set up
-#   include_tasks: roles/glusterfs/tasks/bricks.yml
+- name: Ensure bricks set up
+  ansible.builtin.include_tasks: roles/glusterfs/tasks/bricks.yml
 
-# - name: Configure SSL encryption
-#   include_tasks: roles/glusterfs/tasks/ssl.yml
-
-# TODO: update /etc/hosts for all nodes
-# TODO: ensure SSH keygen run
-# TODO: ensure ssh-copy-id from master to each peer
-# - name: Create a trusted storage pool
-#   gluster.gluster.gluster_peer:
-#     state: present
-#     nodes: "{{ gluster_cluster_hosts }}"
+- name: Create a trusted storage pool
+  gluster.gluster.gluster_peer:
+    state: present
+    nodes: "{{ gluster_cluster_hosts }}"
 
 - name: Check if volume exists
   ansible.builtin.shell: |
